@@ -8,6 +8,7 @@ import cors from "cors";
 import { connectDB } from "./config/db.js";
 import studioRoutes from "./routes/studio.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
+import reviewRoutes from "./routes/review.routes.js";
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/api/studios", studioRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 // Home Route
 app.get("/", (req: Request, res: Response) => {
