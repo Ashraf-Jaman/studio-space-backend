@@ -1,4 +1,4 @@
-import studioRoutes from "./routes/studio.routes.js";
+
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -6,15 +6,20 @@ import express from "express";
 import type { Request, Response } from "express";
 import cors from "cors";
 import { connectDB } from "./config/db.js";
+import studioRoutes from "./routes/studio.routes.js";
 
 const app = express();
-app.use("/api/studios", studioRoutes);
 
+// Middleware
 app.use(cors({
   origin: "http://localhost:3000",
 }));
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+app.use("/api/studios", studioRoutes);
 
 // Home Route
 app.get("/", (req: Request, res: Response) => {
