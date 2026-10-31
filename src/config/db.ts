@@ -66,3 +66,7 @@ export const getBookingsCollection = (): Collection<Booking> =>
 
 export const getReviewsCollection = (): Collection<Review> =>
   getDB().collection<Review>("reviews");
+
+export const getWishlistsCollection = () => {
+  return getDB().collection("wishlists");
+};

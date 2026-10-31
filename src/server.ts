@@ -9,6 +9,7 @@ import { connectDB } from "./config/db.js";
 import studioRoutes from "./routes/studio.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
 import reviewRoutes from "./routes/review.routes.js";
+import wishlistRoutes from "./routes/wishlist.routes.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/studios", studioRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/wishlist", wishlistRoutes);
 
 // Home Route
 app.get("/", (req: Request, res: Response) => {
