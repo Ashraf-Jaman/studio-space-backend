@@ -147,7 +147,7 @@ export const removeFromWishlist = async (
       return;
     }
 
-    if (!ObjectId.isValid(id)) {
+    if (typeof id !== "string" || !ObjectId.isValid(id)) {
       res.status(400).json({
         success: false,
         message: "Invalid Wishlist ID",

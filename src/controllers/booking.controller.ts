@@ -1,25 +1,23 @@
-import type { Request, Response } from "express";
+
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { ObjectId } from "mongodb";
+
 import {
   getBookingsCollection,
   getStudiosCollection,
 } from "../config/db.js";
 
-
+// CREATE BOOKING
 export const createBooking = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const {
-      studioId,
-      userId,
-      startTime,
-      endTime,
-    } = req.body;
+    const userId = req.user!.id;
+    const { studioId, startTime, endTime } = req.body;
 
-    // Validate required fields
-    if (!studioId || !userId || !startTime || !endTime) {
+    if (!studioId || !startTime || !endTime) {
       res.status(400).json({
         success: false,
         message: "Please provide all required fields",
@@ -27,7 +25,6 @@ export const createBooking = async (
       return;
     }
 
-    // Validate Studio ID
     if (!ObjectId.isValid(studioId)) {
       res.status(400).json({
         success: false,
@@ -39,7 +36,6 @@ export const createBooking = async (
     const start = new Date(startTime);
     const end = new Date(endTime);
 
-    // Validate booking time
     if (
       Number.isNaN(start.getTime()) ||
       Number.isNaN(end.getTime()) ||
@@ -53,7 +49,6 @@ export const createBooking = async (
       return;
     }
 
-    // Find Studio
     const studio = await getStudiosCollection().findOne({
       _id: new ObjectId(studioId),
     });
@@ -74,7 +69,6 @@ export const createBooking = async (
       return;
     }
 
-    // Check overlapping bookings
     const existingBooking = await getBookingsCollection().findOne({
       studioId: new ObjectId(studioId),
       status: { $in: ["pending", "confirmed"] },
@@ -90,7 +84,6 @@ export const createBooking = async (
       return;
     }
 
-    // Calculate total price
     const durationInHours =
       (end.getTime() - start.getTime()) / (1000 * 60 * 60);
 
@@ -128,22 +121,13 @@ export const createBooking = async (
   }
 };
 
-
-
+// GET MY BOOKINGS
 export const getMyBookings = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const { userId } = req.params;
-
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        message: "User ID is required",
-      });
-      return;
-    }
+    const userId = req.user!.id;
 
     const bookings = await getBookingsCollection()
       .aggregate([
@@ -185,28 +169,19 @@ export const getMyBookings = async (
   }
 };
 
-
-
+// CANCEL BOOKING
 export const cancelBooking = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
+    const userId = req.user!.id;
     const { id } = req.params;
-    const { userId } = req.body;
 
     if (typeof id !== "string" || !ObjectId.isValid(id)) {
       res.status(400).json({
         success: false,
         message: "Invalid booking ID",
-      });
-      return;
-    }
-
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        message: "User ID is required",
       });
       return;
     }
@@ -276,3 +251,199 @@ export const cancelBooking = async (
   }
 };
 
+
+// COMPLETE BOOKING (STUDIO OWNER ONLY)
+export const completeBooking = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { id } = req.params;
+
+    // Validate booking ID
+    if (typeof id !== "string" || !ObjectId.isValid(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid booking ID",
+      });
+      return;
+    }
+
+    // Find booking
+    const booking = await getBookingsCollection().findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!booking) {
+      res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+      return;
+    }
+
+    // Find studio
+    const studio = await getStudiosCollection().findOne({
+      _id: booking.studioId,
+    });
+
+    if (!studio) {
+      res.status(404).json({
+        success: false,
+        message: "Studio not found",
+      });
+      return;
+    }
+
+    // Check studio ownership
+    if (studio.ownerId !== userId) {
+      res.status(403).json({
+        success: false,
+        message: "Only the studio owner can complete this booking",
+      });
+      return;
+    }
+
+    // Only confirmed bookings can be completed
+    if (booking.status !== "confirmed") {
+      res.status(400).json({
+        success: false,
+        message: "Only confirmed bookings can be completed",
+      });
+      return;
+    }
+
+    // Update booking status
+    const result = await getBookingsCollection().updateOne(
+      {
+        _id: new ObjectId(id),
+        status: "confirmed",
+      },
+      {
+        $set: {
+          status: "completed",
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) {
+      res.status(409).json({
+        success: false,
+        message: "Booking status changed. Please try again.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Booking completed successfully",
+    });
+  } catch (error) {
+    console.error("Complete booking error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to complete booking",
+    });
+  }
+};
+
+// CONFIRM BOOKING (STUDIO OWNER ONLY)
+export const confirmBooking = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { id } = req.params;
+
+    // Validate booking ID
+    if (typeof id !== "string" || !ObjectId.isValid(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid booking ID",
+      });
+      return;
+    }
+
+    // Find booking
+    const booking = await getBookingsCollection().findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!booking) {
+      res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+      return;
+    }
+
+    // Find studio
+    const studio = await getStudiosCollection().findOne({
+      _id: booking.studioId,
+    });
+
+    if (!studio) {
+      res.status(404).json({
+        success: false,
+        message: "Studio not found",
+      });
+      return;
+    }
+
+    // Check studio owner
+    if (studio.ownerId !== userId) {
+      res.status(403).json({
+        success: false,
+        message: "Only the studio owner can confirm this booking",
+      });
+      return;
+    }
+
+    // Only pending bookings can be confirmed
+    if (booking.status !== "pending") {
+      res.status(400).json({
+        success: false,
+        message: "Only pending bookings can be confirmed",
+      });
+      return;
+    }
+
+    // Update booking
+    const result = await getBookingsCollection().updateOne(
+      {
+        _id: new ObjectId(id),
+        status: "pending",
+      },
+      {
+        $set: {
+          status: "confirmed",
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) {
+      res.status(409).json({
+        success: false,
+        message: "Booking status changed. Please try again.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Booking confirmed successfully",
+    });
+  } catch (error) {
+    console.error("Confirm booking error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to confirm booking",
+    });
+  }
+};

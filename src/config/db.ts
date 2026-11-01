@@ -58,6 +58,14 @@ export const getDB = (): Db => {
   return database;
 };
 
+export const getMongoClient = (): MongoClient => {
+  if (!client) {
+    throw new Error("MongoDB client is not connected!");
+  }
+
+  return client;
+};
+
 export const getStudiosCollection = (): Collection<Studio> =>
   getDB().collection<Studio>("studios");
 

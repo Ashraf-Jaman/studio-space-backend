@@ -1,5 +1,5 @@
-
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { ObjectId } from "mongodb";
 
 import {
@@ -8,27 +8,24 @@ import {
   getStudiosCollection,
 } from "../config/db.js";
 
-
+// CREATE REVIEW
 export const createReview = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const {
-      studioId,
-      userId,
-      bookingId,
-      rating,
-      comment,
-    } = req.body;
+    const { studioId, bookingId, rating, comment } = req.body;
+
+    // Get user ID from authenticated session
+    const userId = req.user!.id;
 
     // Validate required fields
     if (
       !studioId ||
-      !userId ||
       !bookingId ||
       rating == null ||
-      !comment?.trim()
+      typeof comment !== "string" ||
+      !comment.trim()
     ) {
       res.status(400).json({
         success: false,
@@ -77,7 +74,7 @@ export const createReview = async (
       return;
     }
 
-    // Check completed booking
+    // Check completed booking belongs to logged-in user
     const booking = await getBookingsCollection().findOne({
       _id: new ObjectId(bookingId),
       studioId: new ObjectId(studioId),
@@ -93,7 +90,7 @@ export const createReview = async (
       return;
     }
 
-    // Prevent duplicate review for the same booking
+    // Prevent duplicate review
     const existingReview = await getReviewsCollection().findOne({
       bookingId: new ObjectId(bookingId),
     });
@@ -136,15 +133,18 @@ export const createReview = async (
   }
 };
 
-
+// GET STUDIO REVIEWS (PUBLIC)
 export const getStudioReviews = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
     const { studioId } = req.params;
 
-    if (typeof studioId !== "string" || !ObjectId.isValid(studioId)) {
+    if (
+      typeof studioId !== "string" ||
+      !ObjectId.isValid(studioId)
+    ) {
       res.status(400).json({
         success: false,
         message: "Invalid studio ID",
@@ -172,16 +172,19 @@ export const getStudioReviews = async (
   }
 };
 
-
+// UPDATE REVIEW
 export const updateReview = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { userId, rating, comment } = req.body;
+    const { rating, comment } = req.body;
 
-    if (!ObjectId.isValid(id)) {
+    // Get user ID from authenticated session
+    const userId = req.user!.id;
+
+    if (typeof id !== "string" || !ObjectId.isValid(id)) {
       res.status(400).json({
         success: false,
         message: "Invalid review ID",
@@ -189,17 +192,13 @@ export const updateReview = async (
       return;
     }
 
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        message: "User ID is required",
-      });
-      return;
-    }
-
     if (
       rating !== undefined &&
-      (!Number.isInteger(rating) || rating < 1 || rating > 5)
+      (
+        !Number.isInteger(Number(rating)) ||
+        Number(rating) < 1 ||
+        Number(rating) > 5
+      )
     ) {
       res.status(400).json({
         success: false,
@@ -208,9 +207,10 @@ export const updateReview = async (
       return;
     }
 
-    if (comment !== undefined && (
-      typeof comment !== "string" || !comment.trim()
-    )) {
+    if (
+      comment !== undefined &&
+      (typeof comment !== "string" || !comment.trim())
+    ) {
       res.status(400).json({
         success: false,
         message: "Comment cannot be empty",
@@ -230,8 +230,13 @@ export const updateReview = async (
       updatedAt: new Date(),
     };
 
-    if (rating !== undefined) updateData.rating = rating;
-    if (comment !== undefined) updateData.comment = comment.trim();
+    if (rating !== undefined) {
+      updateData.rating = Number(rating);
+    }
+
+    if (comment !== undefined) {
+      updateData.comment = comment.trim();
+    }
 
     const result = await getReviewsCollection().updateOne(
       {
@@ -263,27 +268,21 @@ export const updateReview = async (
   }
 };
 
-
+// DELETE REVIEW
 export const deleteReview = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
 
-    if (!ObjectId.isValid(id)) {
+    // Get user ID from authenticated session
+    const userId = req.user!.id;
+
+    if (typeof id !== "string" || !ObjectId.isValid(id)) {
       res.status(400).json({
         success: false,
         message: "Invalid review ID",
-      });
-      return;
-    }
-
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        message: "User ID is required",
       });
       return;
     }

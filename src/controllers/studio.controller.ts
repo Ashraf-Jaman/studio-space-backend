@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { getStudiosCollection } from "../config/db.js";
 import { ObjectId } from "mongodb";
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 
 export const getAllStudios = async (
   req: Request,
@@ -27,12 +28,11 @@ export const getAllStudios = async (
 };
 
 export const createStudio = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
     const {
-      ownerId,
       name,
       description,
       category,
@@ -45,7 +45,6 @@ export const createStudio = async (
     } = req.body;
 
     if (
-      !ownerId ||
       !name ||
       !description ||
       !category ||
@@ -61,8 +60,30 @@ export const createStudio = async (
       return;
     }
 
+    if (
+      !Number.isFinite(Number(pricePerHour)) ||
+      Number(pricePerHour) < 0
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid price",
+      });
+      return;
+    }
+
+    if (
+      !Number.isInteger(Number(capacity)) ||
+      Number(capacity) <= 0
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid capacity",
+      });
+      return;
+    }
+
     const newStudio = {
-      ownerId,
+      ownerId: req.user!.id,
       name,
       description,
       category,
@@ -139,9 +160,8 @@ export const getStudioById = async (
   }
 };
 
-
 export const updateStudio = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
@@ -162,7 +182,10 @@ export const updateStudio = async (
       ...updateData
     } = req.body;
 
-    if (Object.keys(updateData).length === 0) {
+    // Owner ID পরিবর্তন করতে দেওয়া হবে না
+    if (
+      Object.keys(updateData).length === 0
+    ) {
       res.status(400).json({
         success: false,
         message: "Please provide data to update",
@@ -202,8 +225,12 @@ export const updateStudio = async (
       updateData.capacity = Number(updateData.capacity);
     }
 
+    // শুধু নিজের Studio update করতে পারবে
     const result = await getStudiosCollection().updateOne(
-      { _id: new ObjectId(id) },
+      {
+        _id: new ObjectId(id),
+        ownerId: req.user!.id,
+      },
       {
         $set: {
           ...updateData,
@@ -213,9 +240,21 @@ export const updateStudio = async (
     );
 
     if (result.matchedCount === 0) {
-      res.status(404).json({
+      const studio = await getStudiosCollection().findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!studio) {
+        res.status(404).json({
+          success: false,
+          message: "Studio not found",
+        });
+        return;
+      }
+
+      res.status(403).json({
         success: false,
-        message: "Studio not found",
+        message: "You are not authorized to update this studio",
       });
       return;
     }
@@ -239,10 +278,8 @@ export const updateStudio = async (
   }
 };
 
-
-
 export const deleteStudio = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
@@ -258,12 +295,25 @@ export const deleteStudio = async (
 
     const result = await getStudiosCollection().deleteOne({
       _id: new ObjectId(id),
+      ownerId: req.user!.id,
     });
 
     if (result.deletedCount === 0) {
-      res.status(404).json({
+      const studio = await getStudiosCollection().findOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!studio) {
+        res.status(404).json({
+          success: false,
+          message: "Studio not found",
+        });
+        return;
+      }
+
+      res.status(403).json({
         success: false,
-        message: "Studio not found",
+        message: "You are not authorized to delete this studio",
       });
       return;
     }
