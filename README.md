@@ -8,6 +8,16 @@ The API is an Express/Node service backed by MongoDB. `render.yaml` defines a Re
 2. Run `npm ci`, `npm run dev`.
 3. Check `http://localhost:4000/api/health`.
 
+## Deploy to Vercel
+
+1. Import the `studio-space-backend` repository/folder into Vercel with the root directory set to `studio-space-backend`.
+2. Leave the framework preset as **Other**. Vercel automatically detects the `api/index.js` serverless function.
+3. Add `MONGODB_URI`, `DB_NAME`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `CLIENT_URL` in Vercel's Environment Variables.
+4. Set `BETTER_AUTH_URL` to this API's public HTTPS origin (without `/api`) and `CLIENT_URL` to the frontend's public origin. Multiple client origins can be comma-separated.
+5. Deploy, then open `<API origin>/api/health` to verify it returns a success response.
+
+`vercel.json` rewrites every request to the Express handler, so routes such as `/api/studios` and `/api/auth/*` continue to work unchanged.
+
 ## Deploy to Render
 
 1. Push this repository to GitHub and create a Render Blueprint from it.

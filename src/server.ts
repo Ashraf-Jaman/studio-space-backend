@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
-import type { Request, Response } from "express";
+import type { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { toNodeHandler } from "better-auth/node";
 
@@ -17,21 +17,23 @@ import wishlistRoutes from "./routes/wishlist.routes.js";
 const app = express();
 
 // Home Route
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (_req: Request, res: Response) => {
   res.send("Welcome to StudioSpace API!");
 });
 
 // Health Check
-app.get("/api/health", (req: Request, res: Response) => {
+app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: "StudioSpace Backend is Running!",
   });
 });
 
-// Start Server
-const startServer = async (): Promise<void> => {
-  try {
+let initializePromise: Promise<void> | undefined;
+
+const initializeApp = (): Promise<void> => {
+  if (!initializePromise) {
+    initializePromise = (async () => {
     await connectDB();
 
     // Initialize Better Auth after MongoDB connection
@@ -58,16 +60,38 @@ const startServer = async (): Promise<void> => {
     app.use("/api/reviews", reviewRoutes);
     app.use("/api/wishlist", wishlistRoutes);
 
-    const PORT = Number(process.env.PORT) || 4000;
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
       console.log("Better Auth is ready!");
-    });
-  } catch (error) {
-    console.error("Server startup failed:", error);
-    process.exit(1);
+    })();
   }
+
+  return initializePromise;
 };
 
-startServer();
+/** Vercel serverless entry point. */
+export default async function handler(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await initializeApp();
+    app(req, res, next);
+  } catch (error) {
+    console.error("Server startup failed:", error);
+    res.status(500).json({ success: false, message: "Server initialization failed" });
+  }
+}
+
+// A serverless platform invokes the default handler. Keep local development
+// convenient by listening only when this module is executed directly.
+if (!process.env.VERCEL) {
+  initializeApp()
+    .then(() => {
+      const port = Number(process.env.PORT) || 4000;
+      app.listen(port, () => console.log(`Server running on port ${port}`));
+    })
+    .catch((error: unknown) => {
+      console.error("Server startup failed:", error);
+      process.exit(1);
+    });
+}
