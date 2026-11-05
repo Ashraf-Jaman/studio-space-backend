@@ -465,14 +465,14 @@ export const getOwnerRecentBookings = async (
   try {
     const ownerId = req.user!.id;
 
-    // Owner-এর সব Studio খুঁজে বের করা
+    
     const studios = await getStudiosCollection()
       .find({ ownerId })
       .toArray();
 
     const studioIds = studios.map((studio) => studio._id);
 
-    // Owner-এর Studio-গুলোর সর্বশেষ Booking
+    
     const bookings = await getBookingsCollection()
       .aggregate([
         {

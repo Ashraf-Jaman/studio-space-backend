@@ -433,7 +433,7 @@ export const updateStudio = async (
       ...updateData
     } = req.body;
 
-    // Owner ID পরিবর্তন করতে দেওয়া হবে না
+    
     if (
       Object.keys(updateData).length === 0
     ) {
@@ -476,7 +476,7 @@ export const updateStudio = async (
       updateData.capacity = Number(updateData.capacity);
     }
 
-    // শুধু নিজের Studio update করতে পারবে
+    
     const result = await getStudiosCollection().updateOne(
       {
         _id: new ObjectId(id),
@@ -591,14 +591,14 @@ export const getOwnerDashboard = async (
   try {
     const ownerId = req.user!.id;
 
-    // Owner-এর সব Studio খুঁজে বের করা
+    
     const studios = await getStudiosCollection()
       .find({ ownerId })
       .toArray();
 
     const studioIds = studios.map((studio) => studio._id);
 
-    // Owner-এর Studio-গুলোর Booking statistics
+    
     const bookingStats = await getBookingsCollection()
       .aggregate([
         {

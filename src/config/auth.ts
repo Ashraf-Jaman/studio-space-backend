@@ -36,7 +36,7 @@ const createAuth = (secret: string, baseURL: string) => {
 
     secret,
     baseURL,
-    trustedOrigins: ["http://localhost:3000"],
+    trustedOrigins: [process.env.CLIENT_URL || "http://localhost:3000"],
     emailAndPassword: {
       enabled: true,
     },
