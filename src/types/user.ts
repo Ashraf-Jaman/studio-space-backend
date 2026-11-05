@@ -1,0 +1,1 @@
+export type UserRole = "customer" | "studio_owner" | "admin";

@@ -1,5 +1,5 @@
 
-import type { Response } from "express";
+import type { Request,Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { ObjectId } from "mongodb";
 
@@ -7,6 +7,7 @@ import {
   getBookingsCollection,
   getStudiosCollection,
 } from "../config/db.js";
+
 
 // CREATE BOOKING
 export const createBooking = async (
@@ -215,11 +216,19 @@ export const cancelBooking = async (
       return;
     }
 
+    if (booking.status === "confirmed") {
+      res.status(400).json({
+        success: false,
+        message: "Confirmed bookings cannot be cancelled by the customer",
+      });
+      return;
+    }
+
     const result = await getBookingsCollection().updateOne(
       {
         _id: new ObjectId(id),
         userId,
-        status: booking.status,
+        status: "pending",
       },
       {
         $set: {
@@ -232,7 +241,7 @@ export const cancelBooking = async (
     if (result.modifiedCount === 0) {
       res.status(409).json({
         success: false,
-        message: "Booking status changed. Please try again.",
+        message: "Only pending bookings can be cancelled",
       });
       return;
     }
@@ -444,6 +453,176 @@ export const confirmBooking = async (
     res.status(500).json({
       success: false,
       message: "Failed to confirm booking",
+    });
+  }
+};
+
+
+export const getOwnerRecentBookings = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const ownerId = req.user!.id;
+
+    // Owner-এর সব Studio খুঁজে বের করা
+    const studios = await getStudiosCollection()
+      .find({ ownerId })
+      .toArray();
+
+    const studioIds = studios.map((studio) => studio._id);
+
+    // Owner-এর Studio-গুলোর সর্বশেষ Booking
+    const bookings = await getBookingsCollection()
+      .aggregate([
+        {
+          $match: {
+            studioId: { $in: studioIds },
+          },
+        },
+        {
+          $sort: {
+            createdAt: -1,
+          },
+        },
+        {
+          $limit: 10,
+        },
+        {
+          $lookup: {
+            from: "studios",
+            localField: "studioId",
+            foreignField: "_id",
+            as: "studio",
+          },
+        },
+        {
+          $unwind: "$studio",
+        },
+        {
+          $project: {
+            _id: 1,
+            userId: 1,
+            studioId: 1,
+            startTime: 1,
+            endTime: 1,
+            totalPrice: 1,
+            status: 1,
+            paymentStatus: 1,
+            createdAt: 1,
+            "studio.name": 1,
+            "studio.location": 1,
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      message: "Recent bookings fetched successfully",
+      data: bookings,
+    });
+  } catch (error) {
+    console.error("Owner recent bookings error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch recent bookings",
+    });
+  }
+};
+
+
+export const checkStudioAvailability = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { studioId, startTime, endTime } = req.query;
+
+    // Required fields validation
+    if (
+      typeof studioId !== "string" ||
+      typeof startTime !== "string" ||
+      typeof endTime !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "studioId, startTime and endTime are required",
+      });
+      return;
+    }
+
+    // Studio ID validation
+    if (!ObjectId.isValid(studioId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid studio ID",
+      });
+      return;
+    }
+
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      start <= new Date() ||
+      end <= start
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid booking time",
+      });
+      return;
+    }
+
+    // Check studio
+    const studio = await getStudiosCollection().findOne({
+      _id: new ObjectId(studioId),
+    });
+
+    if (!studio) {
+      res.status(404).json({
+        success: false,
+        message: "Studio not found",
+      });
+      return;
+    }
+
+    if (!studio.isAvailable) {
+      res.status(200).json({
+        success: true,
+        available: false,
+        message: "Studio is currently unavailable",
+      });
+      return;
+    }
+
+    // Check overlapping bookings
+    const existingBooking = await getBookingsCollection().findOne({
+      studioId: new ObjectId(studioId),
+      status: { $in: ["pending", "confirmed"] },
+      startTime: { $lt: end },
+      endTime: { $gt: start },
+    });
+
+    const available = !existingBooking;
+
+    res.status(200).json({
+      success: true,
+      available,
+      message: available
+        ? "Studio is available for the selected time"
+        : "Studio is already booked for the selected time",
+    });
+  } catch (error) {
+    console.error("Studio availability error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check studio availability",
     });
   }
 };

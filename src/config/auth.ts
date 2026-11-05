@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { jwt } from "better-auth/plugins";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { getDB, getMongoClient } from "./db.js";
 
@@ -7,12 +8,39 @@ const createAuth = (secret: string, baseURL: string) => {
     database: mongodbAdapter(getDB(), {
       client: getMongoClient(),
     }),
+
+    user: {
+      additionalFields: {
+        role: {
+          type: ["customer", "studio_owner", "admin"],
+          required: false,
+          defaultValue: "customer",
+          input: true,
+        },
+      },
+    },
+
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => ({
+            data: {
+              ...user,
+              // Public signup can choose customer or studio_owner, never admin.
+              role: user.role === "studio_owner" ? "studio_owner" : "customer",
+            },
+          }),
+        },
+      },
+    },
+
     secret,
     baseURL,
     trustedOrigins: ["http://localhost:3000"],
     emailAndPassword: {
       enabled: true,
     },
+    plugins: [jwt()],
   });
 };
 
